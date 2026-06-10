@@ -3,7 +3,7 @@ import json
 import httpx
 import logging
 import asyncio
-from openai import OpenAI
+from openai import AsyncOpenAI
 from dotenv import load_dotenv, find_dotenv
 import datetime
 
@@ -41,10 +41,10 @@ async def analyze_with_llm(context_bundle: dict) -> dict:
     model_name = await get_available_model()
     logger.info(f"Using OpenRouter model: {model_name}")
 
-    client = OpenAI(
+    client = AsyncOpenAI(
         base_url=OPENROUTER_BASE_URL,
         api_key=OPENROUTER_API_KEY,
-        timeout=30.0
+        timeout=60.0
     )
 
     # Context variables
@@ -203,7 +203,7 @@ Ensure that:
             logger.info(f"Sending request to OpenRouter API (completions, attempt {attempt+1})...")
             
             # Use OpenAI compat client
-            response = client.chat.completions.create(
+            response = await client.chat.completions.create(
                 model=model_name,
                 messages=[
                     {"role": "system", "content": system_prompt},
