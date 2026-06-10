@@ -83,31 +83,48 @@ class GenerateRequest(BaseModel):
 async def generate_market_report(req: GenerateRequest):
     from fastapi.responses import StreamingResponse
     from services.report_orchestrator import generate_report
+    import logging
+    
+    logger = logging.getLogger("research")
     
     async def event_generator():
         queue = asyncio.Queue()
         session_id = str(uuid.uuid4())
         
-        async def status_callback(status_message: str):
-            await queue.put({"status": status_message})
-            
-        async def run_pipeline():
+        async def status_callback(msg: str):
+            await queue.put(msg)
+        
+        async def run_report():
             try:
                 report = await generate_report(req.product, req.region, status_callback=status_callback, session_id=session_id)
-                await queue.put({"status": "Complete", "report": report})
+                await queue.put(None)  # Signal end
+                return report
             except Exception as e:
-                await queue.put({"status": "Error", "message": str(e)})
-            finally:
+                logger.error(f"Error: {e}")
+                await queue.put(f"ERROR: {str(e)}")
                 await queue.put(None)
-                
-        # Run background task
-        asyncio.create_task(run_pipeline())
+                raise
         
-        while True:
-            item = await queue.get()
-            if item is None:
-                break
-            yield f"data: {json.dumps(item)}\n\n"
+        task = asyncio.create_task(run_report())
+        report = None
+        
+        try:
+            while True:
+                msg = await queue.get()
+                if msg is None:
+                    # Task finished, get the report
+                    try:
+                        report = await task
+                    except:
+                        report = None
+                    if report:
+                        yield f"data: {json.dumps({'status': 'Complete', 'report': report})}\n\n"
+                    break
+                else:
+                    yield f"data: {json.dumps({'status': msg})}\n\n"
+        except Exception as e:
+            logger.error(f"Generator error: {e}")
+            yield f"data: {json.dumps({'status': 'Error', 'message': str(e)})}\n\n"
             
     return StreamingResponse(
         event_generator(),

@@ -63,7 +63,12 @@ export default function ResearchPage() {
     setErrorMsg("");
 
     try {
-      const response = await fetch("/api/research/generate", {
+      const isDev = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+      const apiHost = isDev
+        ? `${window.location.protocol}//${window.location.hostname}:8000`
+        : "";
+      
+      const response = await fetch(`${apiHost}/research/generate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -82,10 +87,17 @@ export default function ResearchPage() {
 
       const decoder = new TextDecoder();
       let buffer = "";
+      let gotReport = false;
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          if (!gotReport && currentStep === 4) {
+            // Fallback: if the stream ended on complete status but we never got the report details
+            router.push("/reports");
+          }
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n\n");
@@ -108,15 +120,17 @@ export default function ResearchPage() {
                 setCurrentStep(3);
               } else if (payload.status === "Complete") {
                 setCurrentStep(4);
-                // Redirect after a brief success delay
-                setTimeout(() => {
-                  if (payload.report && payload.report.id) {
-                    router.push(`/research/${payload.report.id}`);
-                  } else {
-                    // Fallback: look for reports in the database or redirect to reports list
-                    router.push("/reports");
-                  }
-                }, 1000);
+                if (payload.report) {
+                  gotReport = true;
+                  // Redirect after a brief success delay to show the "Report Saved Successfully!" banner
+                  setTimeout(() => {
+                    if (payload.report.id) {
+                      router.push(`/research/${payload.report.id}`);
+                    } else {
+                      router.push("/reports");
+                    }
+                  }, 2000);
+                }
               } else if (payload.status === "Error") {
                 setErrorMsg(payload.message || "An error occurred during report generation.");
                 setLoading(false);
@@ -373,8 +387,10 @@ export default function ResearchPage() {
               </div>
 
               {currentStep === 4 && (
-                <div className="p-3 bg-emerald-950/20 border border-emerald-800/40 rounded-xl text-emerald-400 text-xs font-semibold text-center animate-pulse">
-                  Report generated! Redirecting to dashboard...
+                <div className="p-4 bg-emerald-950/40 border border-emerald-500/50 rounded-xl text-emerald-400 text-sm font-bold text-center flex flex-col items-center justify-center gap-2 animate-bounce">
+                  <CheckCircle2 className="h-6 w-6 text-emerald-400 animate-pulse" />
+                  <span>Report Saved Successfully!</span>
+                  <span className="text-xs text-slate-400 font-medium">Opening report details...</span>
                 </div>
               )}
             </div>

@@ -58,12 +58,14 @@ async def generate_report(product: str, region: str, status_callback=None, sessi
             await status_callback("Searching market data...")
             
         market_overview = await search_market_overview(product, region)
+        await asyncio.sleep(0.5)  # Allow UI to display this step
 
         # Step 3: Gather event intelligence (Stepper Step 2)
         if status_callback:
             await status_callback("Scanning event calendars...")
             
         events_list = await get_event_intelligence_async(product, region)
+        await asyncio.sleep(0.5)  # Allow UI to display this step
 
         # Step 4: Discover client companies (Stepper Step 3)
         if status_callback:
@@ -95,6 +97,8 @@ async def generate_report(product: str, region: str, status_callback=None, sessi
         # Step 5: Assemble Context Bundle and Run AI Synthesis (Stepper Step 4)
         if status_callback:
             await status_callback("Running AI synthesis...")
+        
+        await asyncio.sleep(0.5)  # Allow UI to display this step
             
         context_bundle = {
             "product": product,
@@ -109,6 +113,7 @@ async def generate_report(product: str, region: str, status_callback=None, sessi
         report_json = await analyze_with_llm(context_bundle)
 
         # Step 8: Save final report to NeonDB
+        report_id = str(uuid.uuid4())
         if db.pool:
             try:
                 now = datetime.datetime.now(datetime.timezone.utc)
@@ -120,14 +125,18 @@ async def generate_report(product: str, region: str, status_callback=None, sessi
                     )
                     
                     # Insert report
-                    report_id = str(uuid.uuid4())
                     await conn.execute(
                         "INSERT INTO reports (id, session_id, report_json, created_at) VALUES ($1::uuid, $2::uuid, $3, $4)",
                         report_id, session_id, json.dumps(report_json), now
                     )
                 logger.info(f"Report saved successfully to NeonDB reports table for session {session_id}")
+                report_json["id"] = report_id
             except Exception as e:
                 logger.error(f"Failed to save report to database: {e}")
+        
+        # Fallback to ensure id is always present in report_json
+        if "id" not in report_json:
+            report_json["id"] = report_id
 
         if status_callback:
             await status_callback("Complete")

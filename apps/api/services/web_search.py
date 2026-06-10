@@ -14,6 +14,8 @@ logger = logging.getLogger("web_search")
 
 load_dotenv(find_dotenv())
 
+SERPER_API_KEY = os.getenv("SERPER_API_KEY")
+
 # In-memory fallback cache in case Supabase is offline/unconfigured
 local_cache = {}
 
