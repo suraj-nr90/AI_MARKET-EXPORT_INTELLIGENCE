@@ -7,6 +7,10 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services.report_orchestrator import generate_report
 
+@pytest.fixture
+def anyio_backend():
+    return 'asyncio'
+
 @pytest.mark.anyio
 async def test_generate_report():
     # Run orchestration for PCM Panels in India

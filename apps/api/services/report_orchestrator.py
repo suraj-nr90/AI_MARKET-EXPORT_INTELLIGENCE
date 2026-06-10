@@ -8,9 +8,10 @@ from knowledge.regions import REGIONS
 from services.web_search import (
     search_market_overview,
     search_top_companies,
-    search_competitive_landscape,
-    supabase_client
+    search_competitive_landscape
 )
+from services.db import db
+import json
 from services.event_intelligence import get_event_intelligence_async
 from services.llm_analyzer import analyze_with_llm
 
@@ -32,10 +33,15 @@ async def generate_report(product: str, region: str, status_callback=None, sessi
         "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
     }
     
-    if supabase_client:
+    if db.pool:
         try:
-            supabase_client.table("research_sessions").insert(session_data).execute()
-            logger.info(f"Initialized research session {session_id} in Supabase.")
+            now = datetime.datetime.now(datetime.timezone.utc)
+            async with db.pool.acquire() as conn:
+                await conn.execute(
+                    "INSERT INTO research_sessions (id, product, region, status, created_at) VALUES ($1::uuid, $2, $3, $4, $5)",
+                    session_id, db_product, region, "processing", now
+                )
+            logger.info(f"Initialized research session {session_id} in NeonDB.")
         except Exception as e:
             logger.error(f"Failed to create research session in DB: {e}")
 
@@ -102,22 +108,24 @@ async def generate_report(product: str, region: str, status_callback=None, sessi
 
         report_json = await analyze_with_llm(context_bundle)
 
-        # Step 8: Save final report to Supabase
-        if supabase_client:
+        # Step 8: Save final report to NeonDB
+        if db.pool:
             try:
-                # Update status of session
-                supabase_client.table("research_sessions").update({
-                    "status": "completed"
-                }).eq("id", session_id).execute()
-                
-                # Insert report
-                supabase_client.table("reports").insert({
-                    "id": str(uuid.uuid4()),
-                    "session_id": session_id,
-                    "report_json": report_json,
-                    "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
-                }).execute()
-                logger.info(f"Report saved successfully to Supabase reports table for session {session_id}")
+                now = datetime.datetime.now(datetime.timezone.utc)
+                async with db.pool.acquire() as conn:
+                    # Update status of session
+                    await conn.execute(
+                        "UPDATE research_sessions SET status = $1 WHERE id = $2::uuid",
+                        "completed", session_id
+                    )
+                    
+                    # Insert report
+                    report_id = str(uuid.uuid4())
+                    await conn.execute(
+                        "INSERT INTO reports (id, session_id, report_json, created_at) VALUES ($1::uuid, $2::uuid, $3, $4)",
+                        report_id, session_id, json.dumps(report_json), now
+                    )
+                logger.info(f"Report saved successfully to NeonDB reports table for session {session_id}")
             except Exception as e:
                 logger.error(f"Failed to save report to database: {e}")
 
@@ -128,11 +136,13 @@ async def generate_report(product: str, region: str, status_callback=None, sessi
 
     except Exception as e:
         logger.error(f"Orchestration failure for product={product}, region={region}: {e}")
-        if supabase_client:
+        if db.pool:
             try:
-                supabase_client.table("research_sessions").update({
-                    "status": "failed"
-                }).eq("id", session_id).execute()
+                async with db.pool.acquire() as conn:
+                    await conn.execute(
+                        "UPDATE research_sessions SET status = $1 WHERE id = $2::uuid",
+                        "failed", session_id
+                    )
             except Exception as e_status:
                 logger.error(f"Failed to update session to failed: {e_status}")
         raise e

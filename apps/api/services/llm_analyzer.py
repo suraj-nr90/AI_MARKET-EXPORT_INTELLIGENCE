@@ -4,64 +4,22 @@ import httpx
 import logging
 import asyncio
 from openai import OpenAI
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 import datetime
 
 # Configure logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("llm_analyzer")
 
-load_dotenv()
+load_dotenv(find_dotenv())
 
-NVIDIA_NIM_BASE_URL = os.getenv("NVIDIA_NIM_BASE_URL", "https://integrate.api.nvidia.com/v1")
-NVIDIA_NIM_API_KEY = os.getenv("NVIDIA_NIM_API_KEY")
+OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 async def get_available_model() -> str:
-    """Queries the NVIDIA NIM /models endpoint to detect the active model id."""
-    default_model = "nvidia/nemotron-3-8b-chat-4k-steerlm"
-    if not NVIDIA_NIM_API_KEY:
-        return default_model
-        
-    url = f"{NVIDIA_NIM_BASE_URL.rstrip('/')}/models"
-    headers = {"Authorization": f"Bearer {NVIDIA_NIM_API_KEY}"}
-    
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, headers=headers, timeout=6.0)
-            if response.status_code == 200:
-                models_data = response.json()
-                model_ids = [m.get("id") for m in models_data.get("data", [])]
-                logger.info(f"Detected available NIM models: {model_ids}")
-                
-                # Prioritize faster, modern preferred models
-                preferred_models = [
-                    "meta/llama-3.1-8b-instruct",
-                    "meta/llama-3.3-70b-instruct",
-                    "nvidia/llama-3.1-nemotron-51b-instruct",
-                    "nvidia/nemotron-3-8b-chat-4k-steerlm",
-                    "nvidia/nemotron-3-8b-instruct"
-                ]
-                for pref in preferred_models:
-                    for m_id in model_ids:
-                        if pref in m_id:
-                            return m_id
-                            
-                # Fallback check for any nemotron
-                for m_id in model_ids:
-                    if "nemotron" in m_id:
-                        return m_id
-                        
-                # Look for fallback models hosted on NIM (like Llama-3-8b)
-                for m_id in model_ids:
-                    if "llama" in m_id and "8b" in m_id:
-                        return m_id
-                        
-                if model_ids:
-                    return model_ids[0]
-    except Exception as e:
-        logger.warning(f"Could not reach NIM models endpoint: {e}. Defaulting to {default_model}")
-        
-    return default_model
+    """Returns the optimal model for OpenRouter."""
+    return "deepseek/deepseek-chat"
+
 
 def clean_json_response(raw_text: str) -> str:
     """Cleans markdown fences or trailing whitespaces from the LLM output."""
@@ -75,18 +33,17 @@ def clean_json_response(raw_text: str) -> str:
     return cleaned.strip()
 
 async def analyze_with_llm(context_bundle: dict) -> dict:
-    """Synthesizes the gathered market data into a structured report using NVIDIA NIM API."""
-    if not NVIDIA_NIM_API_KEY:
-        logger.error("NVIDIA_NIM_API_KEY is missing. Returning partial bundle report.")
-        return generate_partial_fallback(context_bundle, "Missing NVIDIA NIM API Key")
+    """Synthesizes the gathered market data into a structured report using OpenRouter API."""
+    if not OPENROUTER_API_KEY:
+        logger.error("OPENROUTER_API_KEY is missing. Returning partial bundle report.")
+        return generate_partial_fallback(context_bundle, "Missing OpenRouter API Key")
 
-    # Detect the correct model
     model_name = await get_available_model()
-    logger.info(f"Using NIM model: {model_name}")
+    logger.info(f"Using OpenRouter model: {model_name}")
 
     client = OpenAI(
-        base_url=NVIDIA_NIM_BASE_URL,
-        api_key=NVIDIA_NIM_API_KEY,
+        base_url=OPENROUTER_BASE_URL,
+        api_key=OPENROUTER_API_KEY,
         timeout=30.0
     )
 
@@ -243,7 +200,7 @@ Ensure that:
     attempts = 2
     for attempt in range(attempts):
         try:
-            logger.info(f"Sending request to NIM API (completions, attempt {attempt+1})...")
+            logger.info(f"Sending request to OpenRouter API (completions, attempt {attempt+1})...")
             
             # Use OpenAI compat client
             response = client.chat.completions.create(
@@ -253,7 +210,8 @@ Ensure that:
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.1,
-                max_tokens=3000
+                max_tokens=8192,
+                response_format={"type": "json_object"}
             )
             
             raw_content = response.choices[0].message.content
@@ -264,12 +222,12 @@ Ensure that:
             return report
             
         except (httpx.HTTPError, httpx.TimeoutException) as e:
-            logger.warning(f"NIM API HTTP Error (attempt {attempt+1}): {e}")
+            logger.warning(f"OpenRouter API HTTP Error (attempt {attempt+1}): {e}")
             if attempt == 0:
-                logger.info("Retrying NIM API call in 3 seconds...")
+                logger.info("Retrying OpenRouter API call in 3 seconds...")
                 await asyncio.sleep(3.0)
             else:
-                return generate_partial_fallback(context_bundle, f"NIM Connection failed: {e}")
+                return generate_partial_fallback(context_bundle, f"OpenRouter Connection failed: {e}")
                 
         except json.JSONDecodeError as e:
             logger.warning(f"JSON parsing failed on attempt {attempt+1}: {e}")
@@ -280,7 +238,7 @@ Ensure that:
                 return generate_partial_fallback(context_bundle, f"JSON Parsing failed: {e}")
                 
         except Exception as e:
-            logger.error(f"Unexpected error during NIM completion: {e}")
+            logger.error(f"Unexpected error during OpenRouter completion: {e}")
             return generate_partial_fallback(context_bundle, f"Unexpected error: {e}")
             
     return generate_partial_fallback(context_bundle, "LLM Synthesis failed")

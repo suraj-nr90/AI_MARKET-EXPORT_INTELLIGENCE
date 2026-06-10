@@ -4,26 +4,15 @@ import logging
 import datetime
 from urllib.parse import urlparse
 import httpx
-from dotenv import load_dotenv
-from supabase import create_client, Client
+from dotenv import load_dotenv, find_dotenv
+import json
+from services.db import db
 
 # Configure logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("web_search")
 
-load_dotenv()
-
-SERPER_API_KEY = os.getenv("SERPER_API_KEY")
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
-supabase_client = None
-if SUPABASE_URL and SUPABASE_KEY:
-    try:
-        supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        logger.info("Supabase client initialized successfully in web_search.")
-    except Exception as e:
-        logger.error(f"Error initializing Supabase client: {e}")
+load_dotenv(find_dotenv())
 
 # In-memory fallback cache in case Supabase is offline/unconfigured
 local_cache = {}
@@ -37,7 +26,7 @@ def estimate_tokens(text: str) -> int:
 
 async def check_db_cache(product: str, region: str, search_type: str) -> dict | None:
     """Checks the Supabase search_cache table for cached results under 24 hours old."""
-    if not supabase_client:
+    if not db.pool:
         # Fallback to local cache
         cache_key = f"{product}:{region}:{search_type}"
         cached = local_cache.get(cache_key)
@@ -50,21 +39,19 @@ async def check_db_cache(product: str, region: str, search_type: str) -> dict | 
     
     try:
         # Query cache older than 24h
-        time_limit = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=24)).isoformat()
-        response = supabase_client.table("search_cache").select("*")\
-            .eq("product", product)\
-            .eq("region", region)\
-            .eq("search_type", search_type)\
-            .gte("fetched_at", time_limit)\
-            .order("fetched_at", desc=True)\
-            .limit(1)\
-            .execute()
-        
-        if response.data:
-            logger.info(f"Supabase Cache HIT for {product} | {region} | {search_type}")
-            return response.data[0]["response_json"]
+        time_limit = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=24)
+        async with db.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT response_json FROM search_cache WHERE product = $1 AND region = $2 AND search_type = $3 AND fetched_at >= $4 ORDER BY fetched_at DESC LIMIT 1",
+                product, region, search_type, time_limit
+            )
+            if row:
+                logger.info(f"NeonDB Cache HIT for {product} | {region} | {search_type}")
+                # asyncpg returns strings for json/jsonb if not decoded, but let's parse it safely
+                res = row["response_json"]
+                return json.loads(res) if isinstance(res, str) else res
     except Exception as e:
-        logger.error(f"Supabase cache read failed: {e}")
+        logger.error(f"NeonDB cache read failed: {e}")
     return None
 
 async def save_db_cache(product: str, region: str, search_type: str, data: dict):
@@ -75,20 +62,20 @@ async def save_db_cache(product: str, region: str, search_type: str, data: dict)
         "data": data
     }
     
-    if not supabase_client:
+    if not db.pool:
         return
         
     try:
-        supabase_client.table("search_cache").insert({
-            "product": product,
-            "region": region,
-            "search_type": search_type,
-            "response_json": data,
-            "fetched_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
-        }).execute()
-        logger.info(f"Cache saved to Supabase for {product} | {region} | {search_type}")
+        now = datetime.datetime.now(datetime.timezone.utc)
+        data_json = json.dumps(data)
+        async with db.pool.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO search_cache (product, region, search_type, response_json, fetched_at) VALUES ($1, $2, $3, $4, $5)",
+                product, region, search_type, data_json, now
+            )
+        logger.info(f"Cache saved to NeonDB for {product} | {region} | {search_type}")
     except Exception as e:
-        logger.error(f"Supabase cache save failed: {e}")
+        logger.error(f"NeonDB cache save failed: {e}")
 
 async def execute_serper_search(client: httpx.AsyncClient, query: str, attempts: int = 3) -> dict:
     """Executes a Google Search query via Serper API with exponential backoff retries."""

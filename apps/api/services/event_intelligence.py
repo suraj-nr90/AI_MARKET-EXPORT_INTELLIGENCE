@@ -4,7 +4,7 @@ import datetime
 from urllib.parse import urlparse
 import httpx
 from rapidfuzz import fuzz
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 
 from knowledge.product_kb import PRODUCT_KB
 from knowledge.regions import REGIONS
@@ -14,7 +14,8 @@ from knowledge.static_events import STATIC_EVENTS
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("event_intelligence")
 
-load_dotenv()
+# In production, call load_dotenv() at the entry point.
+load_dotenv(find_dotenv())
 
 PREDICTHQ_API_KEY = os.getenv("PREDICTHQ_API_KEY")
 

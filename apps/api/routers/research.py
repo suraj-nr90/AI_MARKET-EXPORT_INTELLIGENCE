@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from services.web_search import search_market_overview, supabase_client
+from services.web_search import search_market_overview
+from services.db import db
 import uuid
 import datetime
 import asyncio
@@ -14,13 +15,16 @@ class SearchRequest(BaseModel):
 
 @router.get("/")
 async def get_research_sessions():
-    if supabase_client:
+    if db.pool:
         try:
-            res = supabase_client.table("research_sessions").select("*").order("created_at", desc=True).execute()
-            return res.data
+            async with db.pool.acquire() as conn:
+                rows = await conn.fetch("SELECT * FROM research_sessions ORDER BY created_at DESC")
+                # Convert asyncpg Records to dicts
+                # and handle datetime to string if needed, FastAPI usually handles datetime dict values
+                return [dict(row) for row in rows]
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
-    return {"message": "Get all research sessions (Supabase offline)"}
+    return {"message": "Get all research sessions (NeonDB offline)"}
 
 @router.post("/search-test")
 async def search_test(req: SearchRequest):
@@ -34,9 +38,14 @@ async def search_test(req: SearchRequest):
         "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
     }
     
-    if supabase_client:
+    if db.pool:
         try:
-            supabase_client.table("research_sessions").insert(session_data).execute()
+            now = datetime.datetime.now(datetime.timezone.utc)
+            async with db.pool.acquire() as conn:
+                await conn.execute(
+                    "INSERT INTO research_sessions (id, product, region, status, created_at) VALUES ($1::uuid, $2, $3, $4, $5)",
+                    session_id, req.product, req.region, "processing", now
+                )
         except Exception as e:
             print(f"Error saving research session: {e}")
             
@@ -45,9 +54,10 @@ async def search_test(req: SearchRequest):
         search_results = await search_market_overview(req.product, req.region)
         
         # Update session status
-        if supabase_client:
+        if db.pool:
             try:
-                supabase_client.table("research_sessions").update({"status": "completed"}).eq("id", session_id).execute()
+                async with db.pool.acquire() as conn:
+                    await conn.execute("UPDATE research_sessions SET status = $1 WHERE id = $2::uuid", "completed", session_id)
             except Exception as e:
                 print(f"Error updating research session status: {e}")
                 
@@ -57,9 +67,10 @@ async def search_test(req: SearchRequest):
             "data": search_results
         }
     except Exception as e:
-        if supabase_client:
+        if db.pool:
             try:
-                supabase_client.table("research_sessions").update({"status": "failed"}).eq("id", session_id).execute()
+                async with db.pool.acquire() as conn:
+                    await conn.execute("UPDATE research_sessions SET status = $1 WHERE id = $2::uuid", "failed", session_id)
             except Exception as e_status:
                 print(f"Error updating status to failed: {e_status}")
         raise HTTPException(status_code=500, detail=str(e))
