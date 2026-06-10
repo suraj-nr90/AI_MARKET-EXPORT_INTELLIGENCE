@@ -1,0 +1,94 @@
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@layer base {
+  .theme {
+    --font-heading: var(--font-sans);
+    --font-sans: var(--font-sans);
+  }
+  :root {
+    --background: #0A0F1E;
+    --foreground: #FFFFFF;
+    --card: #111625;
+    --card-foreground: #FFFFFF;
+    --popover: #111625;
+    --popover-foreground: #FFFFFF;
+    --primary: #2D7DD2;
+    --primary-foreground: #FFFFFF;
+    --secondary: #1F293D;
+    --secondary-foreground: #FFFFFF;
+    --muted: #1E293B;
+    --muted-foreground: #94A3B8;
+    --accent: #2D7DD2;
+    --accent-foreground: #FFFFFF;
+    --destructive: #EF4444;
+    --border: #1E293B;
+    --input: #1E293B;
+    --ring: #2D7DD2;
+    --chart-1: #2D7DD2;
+    --chart-2: #10B981;
+    --chart-3: #F59E0B;
+    --chart-4: #EF4444;
+    --chart-5: #8B5CF6;
+    --radius: 0.625rem;
+    --sidebar: #080C16;
+    --sidebar-foreground: #E2E8F0;
+    --sidebar-primary: #2D7DD2;
+    --sidebar-primary-foreground: #FFFFFF;
+    --sidebar-accent: #1E293B;
+    --sidebar-accent-foreground: #FFFFFF;
+    --sidebar-border: #1E293B;
+    --sidebar-ring: #2D7DD2;
+  }
+  .dark {
+    --background: #0A0F1E;
+    --foreground: #FFFFFF;
+    --card: #111625;
+    --card-foreground: #FFFFFF;
+    --popover: #111625;
+    --popover-foreground: #FFFFFF;
+    --primary: #2D7DD2;
+    --primary-foreground: #FFFFFF;
+    --secondary: #1F293D;
+    --secondary-foreground: #FFFFFF;
+    --muted: #1E293B;
+    --muted-foreground: #94A3B8;
+    --accent: #2D7DD2;
+    --accent-foreground: #FFFFFF;
+    --destructive: #EF4444;
+    --border: #1E293B;
+    --input: #1E293B;
+    --ring: #2D7DD2;
+    --chart-1: #2D7DD2;
+    --chart-2: #10B981;
+    --chart-3: #F59E0B;
+    --chart-4: #EF4444;
+    --chart-5: #8B5CF6;
+    --sidebar: #080C16;
+    --sidebar-foreground: #E2E8F0;
+    --sidebar-primary: #2D7DD2;
+    --sidebar-primary-foreground: #FFFFFF;
+    --sidebar-accent: #1E293B;
+    --sidebar-accent-foreground: #FFFFFF;
+    --sidebar-border: #1E293B;
+    --sidebar-ring: #2D7DD2;
+  }
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
