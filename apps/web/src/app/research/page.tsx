@@ -66,7 +66,7 @@ export default function ResearchPage() {
       const isDev = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
       const apiHost = isDev
         ? `${window.location.protocol}//${window.location.hostname}:8000`
-        : "";
+        : "/api";
       
       const response = await fetch(`${apiHost}/research/generate`, {
         method: "POST",
