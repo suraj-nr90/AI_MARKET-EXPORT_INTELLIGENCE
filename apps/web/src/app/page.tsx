@@ -28,8 +28,8 @@ export default function Home() {
     const loadDashboardData = async () => {
       try {
         const [repRes, sessRes] = await Promise.all([
-          fetch("/api/reports/"),
-          fetch("/api/research/")
+          fetch("/api/reports"),
+          fetch("/api/research")
         ]);
         if (repRes.ok) {
           const repData = await repRes.json();

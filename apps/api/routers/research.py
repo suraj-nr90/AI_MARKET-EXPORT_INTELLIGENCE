@@ -13,7 +13,7 @@ class SearchRequest(BaseModel):
     product: str
     region: str
 
-@router.get("/")
+@router.get("")
 async def get_research_sessions():
     if db.pool:
         try:

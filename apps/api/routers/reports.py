@@ -5,7 +5,7 @@ import json
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
-@router.get("/")
+@router.get("")
 async def get_reports():
     if db.pool:
         try:

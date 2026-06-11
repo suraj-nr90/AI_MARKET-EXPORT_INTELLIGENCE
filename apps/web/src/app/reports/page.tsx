@@ -21,7 +21,7 @@ export default function ReportsPage() {
 
   const fetchReports = async () => {
     try {
-      const res = await fetch("/api/reports/");
+      const res = await fetch("/api/reports");
       if (!res.ok) {
         throw new Error(`Server returned status: ${res.status}`);
       }
