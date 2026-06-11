@@ -8,7 +8,7 @@ class EventRequest(BaseModel):
     product: str
     region: str
 
-@router.get("/")
+@router.get("")
 async def get_events():
     return {"message": "Get cached events (Route Placeholder)"}
 
