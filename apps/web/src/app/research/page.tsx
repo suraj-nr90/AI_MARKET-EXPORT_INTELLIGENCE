@@ -63,9 +63,10 @@ export default function ResearchPage() {
     setErrorMsg("");
 
     try {
-      const apiHost = process.env.NEXT_PUBLIC_BACKEND_API_URL || "https://export-intelligence.onrender.com";
+      const apiHost = process.env.NEXT_PUBLIC_BACKEND_API_URL;
+      const url = apiHost ? `${apiHost}/research/generate` : "/api/research/generate";
       
-      const response = await fetch(`${apiHost}/research/generate`, {
+      const response = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"

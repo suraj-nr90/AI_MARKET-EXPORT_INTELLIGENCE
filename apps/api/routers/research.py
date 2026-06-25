@@ -121,7 +121,10 @@ async def generate_market_report(req: GenerateRequest):
                         yield f"data: {json.dumps({'status': 'Complete', 'report': report})}\n\n"
                     break
                 else:
-                    yield f"data: {json.dumps({'status': msg})}\n\n"
+                    if isinstance(msg, str) and msg.startswith("ERROR:"):
+                        yield f"data: {json.dumps({'status': 'Error', 'message': msg[6:].strip()})}\n\n"
+                    else:
+                        yield f"data: {json.dumps({'status': msg})}\n\n"
         except Exception as e:
             logger.error(f"Generator error: {e}")
             yield f"data: {json.dumps({'status': 'Error', 'message': str(e)})}\n\n"
